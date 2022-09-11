@@ -3,7 +3,7 @@
 
 // ########## Interrupter Settings ##########
 
-// Use 16*2 Character LCD Module
+// Use 20*4 Character LCD Module
 #define USE_LCD true
 
 // Use Volume Input (DEFAULT = 0-1023)
@@ -15,13 +15,13 @@
 #define INVERT_VR2 false
 #define INVERT_VR3 false
 #define INVERT_VR4 false
-#define DEFAULT_VR1 0
-#define DEFAULT_VR2 0
-#define DEFAULT_VR3 0
-#define DEFAULT_VR4 0
+#define DEFAULT_VR1 100
+#define DEFAULT_VR2 100
+#define DEFAULT_VR3 600
+#define DEFAULT_VR4 100
 
-#define USE_SW1 true
-#define USE_SW2 true
+#define USE_SW1 false
+#define USE_SW2 false
 #define INVERT_SW1 false
 #define INVERT_SW2 false
 #define DEFAULT_SW1 false
@@ -33,7 +33,7 @@
 #define INVERT_PUSH2 false
 
 // Use Setting Mode
-#define USE_SETTING_MODE true
+#define USE_SETTING_MODE false
 
 // Interrupter Mode Selector
 // 0 : 4-Mode [OSC, OSC_OneShot, HighPower_OSC, HighPower_OSC_OneShot]
@@ -79,12 +79,13 @@
 #define MODE_MIDI_FIXED 64
 
 // Pin Number (Do not change the value)
-#define PIN_VR1 A0
-#define PIN_VR2 A1
-#define PIN_VR3 A2
-#define PIN_VR4 A3
-#define PIN_SW1 A4
-#define PIN_SW2 A5
+//#define PIN_VR1 A4
+#define PIN_VR1 A1
+#define PIN_VR2 A2
+#define PIN_VR3 A3
+#define PIN_VR4 A4
+#define PIN_SW1 A0
+#define PIN_SW2 A7
 #define PIN_PUSH1 2 //Interrupt1
 #define PIN_PUSH2 3 //Interrupt0
 

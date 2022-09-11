@@ -1,3 +1,5 @@
+#include <MIDI.h>
+
 //
 // #################################################
 //
@@ -54,8 +56,10 @@
 //
 
 // LCD
-#include <LiquidCrystal.h>
-LiquidCrystal lcd(4, 5, 6, 7, 8, 9);
+//#include <LiquidCrystal.h>
+//LiquidCrystal lcd(8, 9, 4, 5, 6, 7);
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x27, 2, 1, 0, 4, 5, 6, 7, 3, POSITIVE);
 
 // Settings
 #include "settings.h"
@@ -98,8 +102,10 @@ LiquidCrystal lcd(4, 5, 6, 7, 8, 9);
 // Global Variables
 volatile uint8_t int_mode = MODE_OSC;
 volatile uint8_t menu_state = MODE_OSC;
-char lcd_line1[17];
-char lcd_line2[17];
+char lcd_line1[20];
+char lcd_line2[20];
+char lcd_line3[20];
+char lcd_line4[20];
 
 // Setting Variables
 volatile bool beep_active = (bool)DEFAULT_BEEP_ACTIVE;
@@ -133,6 +139,8 @@ volatile uint8_t osc_mono_midi_note[2] = {0, 0};
 volatile uint16_t osc_mono_ontime_us[2] = {0, 0};
 volatile uint16_t osc_mono_ontime_fixed_us[2] = {0, 0};
 
+// 1Mhz generator
+volatile unsigned long t=1, f, k=512;// default 1 μs (1 000 000 Hz), meander, pulse 
 
 // Arduino Setup Function
 void setup() {
@@ -144,18 +152,31 @@ void setup() {
   // MIDI Tasks
   midi_task();
 
+//  pinMode(11, OUTPUT); // 1Mhz gen.
+//  Timer1.initialize(t); // period   
+//  Timer1.pwm(11, k); // k - fill factor 0-1023
+
+//  pinMode(3, OUTPUT); // 1Mhz gen.
+//  Timer3.initialize(t); // period   
+//  Timer3.pwm(3, k); // k - fill factor 0-1023
+
   // LCD
   #if USE_LCD
-    lcd.begin(16,2);
+    lcd.begin(20,4);
     lcd.setCursor(0,0);
-    lcd.print("HTLAB.NET DRSSTC");
+    lcd.print("####################");
     lcd.setCursor(0,1);
-    lcd.print("Interrupter v1.0");
+    lcd.print("# HTLAB.NET DRSSTC #");
+    lcd.setCursor(0,2);
+    lcd.print("# Interrupter v1.0 #");
+    lcd.setCursor(0,3);
+    lcd.print("####################");
     uint32_t wait_start = millis();
     while(millis() < wait_start + 2000){
       // MIDI Tasks
       midi_task();
     }
+    lcd.clear();
   #endif
 
   // For Debug
@@ -194,7 +215,7 @@ void setup() {
   // Setting Mode
   #if USE_SETTING_MODE && USE_LCD
     if(!(INVERT_PUSH1 ^ (bool)digitalRead(2))) {
-      char lcd_line[17];
+      char lcd_line[20];
       lcd.setCursor(0,0);
       lcd.print("[SETTING MODE 1]");
       while(INVERT_PUSH2 ^ (bool)digitalRead(3)) {
@@ -227,7 +248,7 @@ void setup() {
         midi_task();
       }
     } else if(!(INVERT_PUSH2 ^ (bool)digitalRead(3))) {
-      char lcd_line[17];
+      char lcd_line[20];
       lcd.setCursor(0,0);
       lcd.print("[SETTING MODE 2]");
       while(INVERT_PUSH1 ^ (bool)digitalRead(2)) {
@@ -290,7 +311,7 @@ void setup() {
   #if DEBUG_SERIAL
     Serial.println("[INFO] Oscillator Tasks Complete");
   #endif
-
+  
   // MIDI Tasks
   midi_task();
 
@@ -306,6 +327,7 @@ void loop() {
   // Input Tasks
   input_task();
   menu_state = menu_select(mode_selector);
+//  menu_state = MODE_BURST;
   if (int_mode != menu_state) {
     mode_init(menu_state);
     int_mode = menu_state;
@@ -315,8 +337,8 @@ void loop() {
   switch (menu_state) {
     // OSC Mode
     case MODE_OSC:
-      osc_fq = adc_vr_1 + 5;
-      osc_us = (adc_vr_2 >> 2) + 1;
+      osc_fq = (adc_vr_1 >> 1)*0.7 + 50;
+      osc_us = (adc_vr_2 >> 1) + 1;
       osc_per_read = (250000 / osc_fq) - 1;
       if (osc_per != osc_per_read) {
         #if DEBUG_SERIAL
@@ -337,8 +359,8 @@ void loop() {
       break;
     // High Power OSC Mode
     case MODE_OSC_HP:
-      osc_fq = (adc_vr_1 >> 5) + 5;
-      osc_us = (adc_vr_2 >> 3) * 100;
+      osc_fq = (adc_vr_1 >> 4) + 1;
+      osc_us = (adc_vr_2 >> 3) * 50;
       osc_per_read = (250000 / osc_fq) - 1;
       if (osc_per != osc_per_read) {
         osc_per = osc_per_read;
@@ -355,7 +377,7 @@ void loop() {
     case MODE_BURST:
       burst_offtime = (adc_vr_3_inv >> 1) + 10;
       burst_ontime = (adc_vr_4 >> 1) + 10;
-      osc_fq = adc_vr_1 + 5;
+      osc_fq = (adc_vr_1 >> 1)*0.7 + 50;
       osc_us = (adc_vr_2 >> 2) + 1;
       osc_per_read = (250000 / osc_fq) - 1;
       if (osc_per != osc_per_read) {
@@ -493,53 +515,86 @@ void mode_init(byte mode) {
 
 // SHOW LCD
 void show_lcd(byte mode) {
+  char osc_duty[5];
+  char burst_fq[5];
+  dtostrf((float)(100.00 * ((float)osc_us * pow(10.00, -6)) / (1.00 / (osc_us * pow(10.00, -6) + (float)osc_fq))), 4, 1, osc_duty);
+  dtostrf((float)(1.00 / (((float)burst_offtime + (float)burst_ontime) * pow(10.00, -3))), 4, 1, burst_fq);
+  
   switch (mode) {
     // OSC Mode
     case MODE_OSC:
-      sprintf(lcd_line1, "INTERRUPTER MODE");
-      sprintf(lcd_line2, "OSC:%4uHz/%3uus", osc_fq, osc_us);
+      sprintf(lcd_line1, "<> INTERRUPTER MODE");
+//      sprintf(lcd_line2, "Fq:%4uHz OnT:%3uus", osc_fq, osc_us);
+//      sprintf(lcd_line3, "Dt:%s%%", osc_duty);
+      
+      sprintf(lcd_line2, "Fq:%3uHz           ", osc_fq);
+      sprintf(lcd_line3, "On:%3uus          ", osc_us);
+      sprintf(lcd_line4, "Dt:%s%%         ", osc_duty);
       break;
 
     // One Shot Mode
     case MODE_OSC_OS:
-      sprintf(lcd_line1, "ONE SHOT MODE   ");
+      sprintf(lcd_line1, "<> ONE SHOT MODE   ");
       sprintf(lcd_line2, "1:%3uus 2:%3uus ", oneshot_ch1_ontime, oneshot_ch2_ontime);
+      sprintf(lcd_line3, "%s", "                   ");
+      sprintf(lcd_line4, "%s", "                   ");
       break;
 
     // High Power OSC Mode
     case MODE_OSC_HP:
-      sprintf(lcd_line1, "HIGH POWER MODE ");
-      sprintf(lcd_line2, "OSC:%2uHz/%5uus", osc_fq, osc_us);
+      sprintf(lcd_line1, "<> SKP MODE        ");
+      sprintf(lcd_line2, "Fq:%2uHz            ", osc_fq);
+      sprintf(lcd_line3, "On:%5uus       ", osc_us);
+      sprintf(lcd_line4, "Dt:%s%%        ", osc_duty);
       break;
 
     // High Power One Shot Mode
     case MODE_OSC_HP_OS:
-      sprintf(lcd_line1, "HIGH PWR ONESHOT");
-      sprintf(lcd_line2, "1:%5uu2:%5uu", oneshot_ch1_ontime, oneshot_ch2_ontime);
+      sprintf(lcd_line1, "<> SKP ONESHOT     ");
+      sprintf(lcd_line2, "1:%5uu2:%5uu   ", oneshot_ch1_ontime, oneshot_ch2_ontime);
+      sprintf(lcd_line3, "%s", "                   ");
+      sprintf(lcd_line4, "%s", "                   ");
       break;
 
     // Burst OSC Mode
     case MODE_BURST:
-      sprintf(lcd_line1, "BURST%3ums/%3ums", burst_offtime, burst_ontime);
-      sprintf(lcd_line2, "OSC:%4uHz/%3uus", osc_fq, osc_us);
+      sprintf(lcd_line1, "<> BURST MODE       ", burst_offtime, burst_ontime);
+//      sprintf(lcd_line2, "Fq:%3uHz On:%3uus", osc_fq, osc_us);
+//      sprintf(lcd_line3, "Bfq:%sHz Dt:%s%%", burst_fq, osc_duty);
+//      sprintf(lcd_line4, "Off:%3ums On:%3ums", burst_offtime, burst_ontime);
+      
+      sprintf(lcd_line2, "Bf:%sHz |Fq:%3uHz", burst_fq, osc_fq);
+      sprintf(lcd_line3, "Bon:%3ums |On:%3uus", burst_ontime, osc_us);
+      sprintf(lcd_line4, "Off:%3ums |Dt:%s%%", burst_offtime, osc_duty);
       break;
 
     // MIDI Mode
     case MODE_MIDI:
       sprintf(lcd_line1, "MIDI MODE[%2u/%2u]", midi_ch[0], midi_ch[1]);
+      sprintf(lcd_line2, "%s", "                   ");
+      sprintf(lcd_line3, "%s", "                   ");
+      sprintf(lcd_line4, "%s", "                   ");
       show_lcd_midi_status();
       break;
 
     // MIDI Fixed Mode
     case MODE_MIDI_FIXED:
       sprintf(lcd_line1, "F%2u:%3uu %2u:%3uu", midi_ch[0], osc_mono_ontime_fixed_us[0], midi_ch[1], osc_mono_ontime_fixed_us[1]);
+      sprintf(lcd_line2, "%s", "                   ");
+      sprintf(lcd_line3, "%s", "                   ");
+      sprintf(lcd_line4, "%s", "                   ");
       show_lcd_midi_status();
       break;
   }
+  
   lcd.setCursor(0,0);
   lcd.print(lcd_line1);
   lcd.setCursor(0,1);
   lcd.print(lcd_line2);
+  lcd.setCursor(0,2);
+  lcd.print(lcd_line3);
+  lcd.setCursor(0,3);
+  lcd.print(lcd_line4);
 }
 
 

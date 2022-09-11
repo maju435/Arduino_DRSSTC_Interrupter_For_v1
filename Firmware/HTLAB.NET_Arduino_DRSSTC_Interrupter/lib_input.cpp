@@ -12,12 +12,14 @@ volatile bool gpio_sw_1 = !(DEFAULT_SW1);
 volatile bool gpio_sw_2 = !(DEFAULT_SW2);
 volatile bool gpio_push_1;
 volatile bool gpio_push_2;
+volatile bool button_click = true;
+volatile int choosen_menu_item = 0;
 
 void input_init() {
   #if USE_VR1
     pinMode(PIN_VR1, INPUT);
   #endif
-  #if USE_VR2
+  #if USE_VR2 
     pinMode(PIN_VR2, INPUT);
   #endif
   #if USE_VR3
@@ -44,13 +46,13 @@ void input_init() {
 void input_task() {
   // Read Volume
   #if USE_VR1
-    #if !INVERT_VR1
-      adc_vr_1 = ((float)adc_vr_1 * 0.9) + ((float)analogRead(PIN_VR1) * 0.1);
-      adc_vr_1_inv = ((float)adc_vr_1_inv * 0.9) + ((float)(1023 - analogRead(PIN_VR1)) * 0.1);
-    #else
-      adc_vr_1 = ((float)adc_vr_1 * 0.9) + ((float)(1023 - analogRead(PIN_VR1)) * 0.1);
-      adc_vr_1_inv = ((float)adc_vr_1_inv * 0.9) + ((float)analogRead(PIN_VR1) * 0.1);
-    #endif
+     #if !INVERT_VR1
+       adc_vr_1 = ((float)adc_vr_1 * 0.9) + ((float)analogRead(PIN_VR1) * 0.1);
+       adc_vr_1_inv = ((float)adc_vr_1_inv * 0.9) + ((float)(1023 - analogRead(PIN_VR1)) * 0.1);
+     #else
+       adc_vr_1 = ((float)adc_vr_1 * 0.9) + ((float)(1023 - analogRead(PIN_VR1)) * 0.1);
+       adc_vr_1_inv = ((float)adc_vr_1_inv * 0.9) + ((float)analogRead(PIN_VR1) * 0.1);
+     #endif
   #endif
   #if USE_VR2
     #if !INVERT_VR2
@@ -81,16 +83,16 @@ void input_task() {
   #endif
   #if USE_SW1
     #if !INVERT_SW1
-      gpio_sw_1 = (bool)digitalRead(PIN_SW1);
+      gpio_sw_1 = (bool)(analogRead(PIN_SW1) < 60);
     #else
-      gpio_sw_1 = !(bool)digitalRead(PIN_SW1);
+      gpio_sw_1 = !(bool)(analogRead(PIN_SW1) < 60);
     #endif
   #endif
   #if USE_SW2
     #if !INVERT_SW2
-      gpio_sw_2 = (bool)digitalRead(PIN_SW2);
+      gpio_sw_2 = (bool)(60 < analogRead(PIN_SW1) < 600);
     #else
-      gpio_sw_2 = !(bool)digitalRead(PIN_SW2);
+      gpio_sw_2 = !(bool)(60 < analogRead(PIN_SW1) < 600);
     #endif
   #endif
   #if USE_PUSH1
@@ -109,33 +111,62 @@ void input_task() {
   #endif
 }
 
-
 uint8_t menu_select(uint8_t mode_selector) {
+  int menu_item_list[] = {
+    MODE_OSC,
+    MODE_OSC_OS,
+    MODE_OSC_HP,
+    MODE_OSC_HP_OS,
+    MODE_BURST,
+    MODE_MIDI,
+    MODE_MIDI_FIXED
+  };
 
-  // OSC Mode
-  if (gpio_sw_1 && gpio_sw_2) {
-    // Volume Mode Select
-    switch (adc_vr_4 >> (mode_selector + 8)) {
-      case 0:
-        return MODE_OSC;
-      case 1:
-        return MODE_OSC_OS;
-      case 2:
-        return MODE_OSC_HP;
-      case 3:
-        return MODE_OSC_HP_OS;
+  int x = analogRead(PIN_SW1);
+
+  if (button_click) {
+    button_click = false;
+
+    if (x < 10) {
+    //      lcd.print ("LEFT   ");
+      if (choosen_menu_item == 0) {
+        choosen_menu_item = 6;
+      } else {
+        choosen_menu_item--;
+      }
+    }
+    else if (x < 50) {
+    //  lcd.print ("UP ");
+      if (choosen_menu_item == 6) {
+        choosen_menu_item = 0;
+      } else {
+        choosen_menu_item++;
+      }
+    }
+    else if (x < 100) {
+//      lcd.print ("Down    ");
+      if (choosen_menu_item == 0) {
+        choosen_menu_item = 6;
+      } else {
+        choosen_menu_item--;
+      }
+    }
+    else if (x < 200){
+//      lcd.print ("Right  ");
+      if (choosen_menu_item == 6) {
+        choosen_menu_item = 0;
+      } else {
+        choosen_menu_item++;
+      }
+    }
+    else if (x < 400){
+    //  lcd.print ("RED  ");
     }
   }
-  // Burst OSC Mode
-  if (gpio_sw_1 && !gpio_sw_2) {
-    return MODE_BURST;
+
+  if (x > 900) {
+    button_click = true;
   }
-  // MIDI Mode
-  if (!gpio_sw_1 && gpio_sw_2) {
-    return MODE_MIDI;
-  }
-  // MIDI Fixed Mode
-  if (!gpio_sw_1 && !gpio_sw_2) {
-    return MODE_MIDI_FIXED;
-  }
+
+  return menu_item_list[choosen_menu_item];
 }
